@@ -8,14 +8,16 @@ use SilverShop\Model\Address;
 use BetterBrief\GoogleMapField;
 use SilverStripe\Dev\SapphireTest;
 use Exception;
-
+/**
+ * @package silvershop-geocoding
+ */
 class AddressGeocoding extends DataExtension
 {
 
-    private static $db = [
+    private static $db = array(
         'Latitude' => 'Decimal(10,8)', //-90 to 90 degrees
         'Longitude' => 'Decimal(11,8)' //-180 to 180 degrees
-    ];
+    );
 
     private static $inst;
 
@@ -48,7 +50,7 @@ class AddressGeocoding extends DataExtension
         $adapter  = new \Geocoder\HttpAdapter\CurlHttpAdapter();
         $chain = new \Geocoder\Provider\ChainProvider(array(
             new \Geocoder\Provider\HostIpProvider($adapter),
-            new \Geocoder\Provider\GoogleMapsProvider($adapter)
+            new \Geocoder\Provider\GoogleMapsProvider($adapter, null, null, null, GOOGLE_MAPS_API_KEY)
         ));
         $geocoder->registerProvider($chain);
 
@@ -69,14 +71,19 @@ class AddressGeocoding extends DataExtension
 
     public function geocodeAddress()
     {
+        //we don't want geocoding to occur during testing
+        //TODO: we could possibly switch to a mock setup
+        if (class_exists('SapphireTest', false) && SapphireTest::is_running_test()) {
+            return;
+        }
+        //TODO: check if address is valid
         $geocoder = self::get_geocoder();
-
         try {
             $geocoded = $geocoder->geocode($this->owner->toString());
             $this->owner->Latitude = $geocoded->getLatitude();
             $this->owner->Longitude = $geocoded->getLongitude();
         } catch (Exception $e) {
-
+            SS_Log::log($e, SS_Log::ERR);
         }
     }
 
@@ -98,11 +105,11 @@ class AddressGeocoding extends DataExtension
         }
 
         return self::haversine_distance(
-            $this->owner->Latitude,
-            $this->owner->Longitude,
-            $address->Latitude,
-            $address->Longitude
-        ) / 1000; //convert meters to km
+                $this->owner->Latitude,
+                $this->owner->Longitude,
+                $address->Latitude,
+                $address->Longitude
+            ) / 1000; //convert meters to km
     }
 
     /**
@@ -128,7 +135,7 @@ class AddressGeocoding extends DataExtension
         $lonDelta = $lonTo - $lonFrom;
 
         $angle = 2 * asin(sqrt(pow(sin($latDelta / 2), 2) +
-            cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)));
+                cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)));
         return $angle * $earthRadius;
     }
 }
